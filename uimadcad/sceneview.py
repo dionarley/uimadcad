@@ -100,7 +100,7 @@ class Scene(madcad.rendering.Scene, QObject):
 				if not scope:
 					continue
 				obj = scope.get(selected.name)
-				if not obj:
+				if obj is None:
 					continue
 				if selected.scope == self.app.interpreter.filename:
 					new[selected.name] = obj
@@ -446,7 +446,7 @@ class SceneView(madcad.rendering.QView3D):
 			nav.yaw = roll(orientation)
 			nav.pitch = pi/2 - pitch(orientation)
 		elif isinstance(nav, Orbit):
-			nav.orient = orientation
+			nav.orientation = inverse(orientation)
 		else:
 			raise TypeError('navigation type {} is not supported for standard views'.format(type(nav)))
 		self.update()

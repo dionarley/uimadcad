@@ -538,13 +538,13 @@ class ScriptEdit(QPlainTextEdit):
 	def keyPressEvent(self, event):
 		event.ignore()
 		cursor = self.textCursor()
-		if cursor.hasSelection():
-			if event.key() == Qt.Key.Key_Tab:		
+		if event.key() == Qt.Key.Key_Tab:
+			if cursor.hasSelection():
 				self.parent().indent_increase.trigger()
 				event.accept()
-			elif event.key() == Qt.Key.Key_Backtab:	
-				self.parent().indent_decrease.trigger()
-				event.accept()
+		elif event.key() == Qt.Key.Key_Backtab:
+			self.parent().indent_decrease.trigger()
+			event.accept()
 		if not event.isAccepted():
 			return super().keyPressEvent(event)
 	

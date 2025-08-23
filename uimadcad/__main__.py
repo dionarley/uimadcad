@@ -29,6 +29,14 @@ if __name__ == '__main__':
 	if len(sys.argv) >= 2:
 		file = sys.argv[1]
 	
+	# # limit numpy threads (because it is using ways too much when solving kinematic
+	# os.environ["OMP_NUM_THREADS"] = "2"
+	# os.environ["OPENBLAS_NUM_THREADS"] = "2"
+	# os.environ["MKL_NUM_THREADS"] = "2"
+	# os.environ["VECLIB_MAXIMUM_THREADS"] = "2"
+	# os.environ["NUMEXPR_NUM_THREADS"] = "2"
+
+	
 	# set Qt opengl context sharing to avoid reinitialization of scenes everytime, (this is for pymadcad display)
 	QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
 	# setup Qt application
@@ -58,8 +66,11 @@ if __name__ == '__main__':
 		madcad.settings.use_qt_colors()
 	if settings.scriptview['system_theme']:
 		settings.use_qt_colors()
+		
+	from threadpoolctl import threadpool_limits
+	with threadpool_limits(limits=1, user_api='blas'):
 	
-	# start software
-	madcad = Madcad(file)
+		# start software
+		madcad = Madcad(file)
 	
 	qtmain(app)
