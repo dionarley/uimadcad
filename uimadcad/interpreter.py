@@ -67,7 +67,11 @@ class Interpreter:
 			# collect user variable with their original definitions, the definition will be modified inplace but at least we have its root
 			originals = ast.locate(code, self.filename)
 			self.usages = ast.usage(code, self.filename)
-			code = list(ast.parcimonize(self.cache, self.filename, (), module.keys(), code, self.previous, 
+			code = list(ast.parcimonize(self.cache, self.filename, 
+				args = (), 
+				globals = {k:False for k in module.keys()}, 
+				code = code, 
+				previous = self.previous, 
 				# assuming only calls might be long ioperations
 				filter=lambda node: any(isinstance(node, ast.Call)  for node in ast.walk(node)),
 				))

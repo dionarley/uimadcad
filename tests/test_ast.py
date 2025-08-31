@@ -39,7 +39,7 @@ def test_parcimonize():
 	previous = {}
 	
 	result = Module(
-		list(parcimonize(cache=cache, scope=filename, globals=set(), args=(), code=original_ast.body, previous=previous)),
+		list(parcimonize(cache=cache, scope=filename, globals={}, args=(), code=original_ast.body, previous=previous)),
 		type_ignores=[])
 	nprint('\n'.join(dump(node) for node in result.body))
 	fix_missing_locations(result)
@@ -62,7 +62,7 @@ def test_parcimonize():
 
 	second_ast = parse(code.format('b = bar(a, e)'))
 	result = Module(
-		list(parcimonize(cache=cache, scope=filename, globals=set(), args=(), code=second_ast.body, previous=previous)),
+		list(parcimonize(cache=cache, scope=filename, globals={}, args=(), code=second_ast.body, previous=previous)),
 		type_ignores=[])
 	fix_missing_locations(result)
 	bytecode = compile(result, filename, 'exec')
@@ -267,19 +267,45 @@ def test_usage_scopes():
 	usages = usage(code.body, 'root')
 	nprint(usages)
 	assert usages == {
-        'root.truc': Usage(ro={'a', 'b'}, wo={'c'}, rw=set()),
+        'root.truc': Usage(ro={'a', 'b'}, wo=set(), rw={'c'}),
         'root.machin': Usage(ro={'a'}, wo={'b'}, rw=set()),
-        'root.chose.muche': Usage(ro={'a', 'c', 'b'}, wo={'e'}, rw={'d'}),
-        'root.chose': Usage(ro=set(), wo=set(), rw=set()),
+        'root.chose.muche': Usage(ro={'a', 'c', 'b'}, wo=set(), rw={'d', 'e'}),
+        'root.chose': Usage(ro={'muche'}, wo=set(), rw=set()),
         'root': Usage(ro={'chose', 'truc', 'machin'}, wo={'t', 'c', 'm'}, rw=set()),
         }
         
 	usages = usage(flatten(code.body), 'root')
 	nprint(usages)
 	assert usages == {
-        'root.truc': Usage(ro={'a', 'b'}, wo={'_return'}, rw={'c', '_temp1'}),
-        'root.machin': Usage(ro={'a'}, wo={'_return', 'b'}, rw=set()),
-        'root.chose.muche': Usage(ro={'a', 'c', 'b'}, wo={'e'}, rw={'d'}),
-        'root.chose': Usage(ro={'muche'}, wo={'_return'}, rw=set()),
+        'root.truc': Usage(ro={'a', 'b'}, wo=set(), rw={'c', '_temp1', '_return'}),
+        'root.machin': Usage(ro={'a'}, wo={'b'}, rw={'_return'}),
+        'root.chose.muche': Usage(ro={'a', 'c', 'b'}, wo=set(), rw={'d', 'e'}),
+        'root.chose': Usage(ro={'muche'}, wo=set(), rw={'_return'}),
         'root': Usage(ro={'truc', 'machin', 'chose'}, wo={'m', 'c', 't'}, rw=set()),
         }
+
+def test_dependencies():
+	code = parse(normalize_indent('''\
+		if depth is None:
+			depth = stceil(diameter*0.3)
+		return extrusion(wire([
+			X*diameter,
+			X*depth,
+			X*depth + length*Z,
+			X*diameter + length*Z,
+			]).flip(), Y*diameter, alignment=0.5)
+		'''))
+	assert set(dependencies(code)) == {'depth', 'extrusion', 'wire', 'X', 'diameter', 'stceil', 'length', 'Y', 'Z'}
+	
+	code = parse(normalize_indent('''\
+		def coupling_flat(diameter, length, depth=None):
+			if depth is None:
+				depth = stceil(diameter*0.3)
+			return extrusion(wire([
+				X*diameter,
+				X*depth,
+				X*depth + length*Z,
+				X*diameter + length*Z,
+				]).flip(), Y*diameter, alignment=0.5)
+		'''))
+	assert set(dependencies(code)) == {'extrusion', 'wire', 'X', 'stceil', 'Y', 'Z'}

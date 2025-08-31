@@ -11,14 +11,13 @@ from copy import deepcopy
 from pnprint import nprint
 
 
-def parcimonize(cache: dict, scope: str, args: list[str], globals: set[str], code: Iterable[AST], previous: dict, filter:callable=None) -> Iterable[AST]:
+def parcimonize(cache: dict, scope: str, args: list[str], globals: dict[str,bool], code: Iterable[AST], previous: dict, filter:callable=None) -> Iterable[AST]:
 	''' make a code lazily executable by reusing as much previous results as possible '''
 	assigned = Counter()
-	changed = set()
 	memo = dict()
-	locals = set(results(code))
+	locals = {name: False for name in results(code)}
 	
-	homogenize(code, set(args) | globals)
+	homogenize(code, set(args) | globals.keys())
 	
 	# new ast body
 	yield from _scope_init(scope, args)
@@ -40,9 +39,14 @@ def parcimonize(cache: dict, scope: str, args: list[str], globals: set[str], cod
 			previous[scope] = {}
 		previous = previous[scope]
 		
-		if not equal(previous.get(key), node) or any(dep in changed  for dep in deps):
+		# TODO count modified values before modifying functions defined here, functions may capture other variables assigned after function creation
+		if not equal(previous.get(key), node) or any(
+				(dep in locals and locals[dep]) 
+				or (dep in globals and globals[dep])  
+				for dep in deps):
 			# count all depending variables as changed
-			changed.update(provided)
+			for name in provided:
+				locals[name] = True
 			# void cache of changed statements
 			# print('discard caches (def changed) for', key)
 			if scope in cache:
@@ -56,7 +60,7 @@ def parcimonize(cache: dict, scope: str, args: list[str], globals: set[str], cod
 		# functions are caching in separate scopes
 		if isinstance(node, FunctionDef):
 			# TODO do not parcimonize functions that are passed as arguments (callbacks are likely to be called very often)
-			yield _parcimonize_func(cache, scope, globals | locals, node, key, previous, filter)
+			yield _parcimonize_func(cache, scope, globals | locals, node, key, previous, filter, )
 		
 		elif not filter or filter(node):
 			# an expression assigned is assumed to not modify its arguments
@@ -282,65 +286,6 @@ class ArgumentsKey:
 	def __repr__(self):
 		return '{}({})'.format(self.__class__.__name__, ', '.join(repr(arg) for arg in self.args))
 	
-
-def dependencies(node: AST|list[AST]) -> Iterator[str]:
-	''' yield names of variables a node depends on '''
-	if isinstance(node, Name) and isinstance(node.ctx, Load):
-		yield node.id
-	elif isinstance(node, FunctionDef):
-		for expr in chain(node.args.defaults, node.args.kw_defaults):
-			yield from dependencies(expr)
-	# prevent yielding generator variables as dependencies (they are from local scope)
-	elif isinstance(node, (ListComp, DictComp, SetComp, GeneratorExp)):
-		targets = set()
-		for generator in node.generators:
-			targets.update(results(generator.target))
-		for child in iter_child_nodes(node):
-			for dep in dependencies(child):
-				if dep not in targets:
-					yield dep
-	elif isinstance(node, AST):
-		for child in iter_child_nodes(node):
-			yield from dependencies(child)
-	else:
-		for node in node:
-			yield from dependencies(node)
-
-def results(node: AST|list[AST], inplace=False) -> Iterator[str]:
-	''' yield names of variables assigned by a node '''
-	if isinstance(node, Name) and (isinstance(node.ctx, Store) or inplace):
-		yield node.id
-	elif isinstance(node, (FunctionDef, ClassDef)):
-		yield node.name
-	elif isinstance(node, (Import, ImportFrom)):
-		for alias in node.names:
-			if alias.name == '*':
-				continue
-			yield alias.name
-	elif isinstance(node, Return):
-		yield 'return'
-	elif isinstance(node, Assign):
-		for target in node.targets:
-			yield from results(target, inplace=True)
-	elif isinstance(node, NamedExpr):
-		yield from results(node.target, inplace=True)
-	elif isinstance(node, (Attribute, Subscript)):
-		yield from results(node.value, inplace)
-	elif isinstance(node, Call):
-		# if attribute is called, it is assumed to be a method modifying its self
-		if isinstance(node.func, Attribute):
-			yield from results(node.func.value, inplace=True)
-		# if function is called with inplace presumtion it is assumed to modify its first argument
-		elif inplace:
-			arg = next(iter(node.args), None) or next(iter(node.keywords), None)
-			if arg:
-				yield from results(arg, inplace=True)
-	elif isinstance(node, AST):
-		for child in iter_child_nodes(node):
-			yield from results(child)
-	else:
-		for node in node:
-			yield from results(node, True)
 
 
 def homogenize(node:AST|list[AST], scope:set[str]=None) -> set[str]:
@@ -631,6 +576,74 @@ def locate(code:Iterable[AST], scope:str, locations=None) -> dict[str, dict[str,
 	
 	return locations
 	
+
+def dependencies(node: AST|list[AST]) -> Iterator[str]:
+	''' yield names of variables a node depends on '''
+	if isinstance(node, Name) and isinstance(node.ctx, Load):
+		yield node.id
+	elif isinstance(node, FunctionDef):
+		# a function can capture values as default arguments
+		for expr in chain(node.args.defaults, node.args.kw_defaults):
+			yield from dependencies(expr)
+		# a function body can use global/cell variables
+		args = set(arg.arg for arg in chain(
+			node.args.posonlyargs, node.args.args, node.args.kwonlyargs
+			))
+		for name, scope in usage(node.body, node.name).items():
+			for name in scope.ro:
+				if name not in args:
+					yield name
+	# prevent yielding generator variables as dependencies (they are from local scope)
+	elif isinstance(node, (ListComp, DictComp, SetComp, GeneratorExp)):
+		targets = set()
+		for generator in node.generators:
+			targets.update(results(generator.target))
+		for child in iter_child_nodes(node):
+			for dep in dependencies(child):
+				if dep not in targets:
+					yield dep
+	elif isinstance(node, AST):
+		for child in iter_child_nodes(node):
+			yield from dependencies(child)
+	else:
+		for node in node:
+			yield from dependencies(node)
+
+def results(node: AST|list[AST], inplace=False) -> Iterator[str]:
+	''' yield names of variables assigned by a node '''
+	if isinstance(node, Name) and (isinstance(node.ctx, Store) or inplace):
+		yield node.id
+	elif isinstance(node, (FunctionDef, ClassDef)):
+		yield node.name
+	elif isinstance(node, (Import, ImportFrom)):
+		for alias in node.names:
+			if alias.name == '*':
+				continue
+			yield alias.name
+	elif isinstance(node, Return):
+		pass
+	elif isinstance(node, Assign):
+		for target in node.targets:
+			yield from results(target, inplace=True)
+	elif isinstance(node, NamedExpr):
+		yield from results(node.target, inplace=True)
+	elif isinstance(node, (Attribute, Subscript)):
+		yield from results(node.value, inplace)
+	elif isinstance(node, Call):
+		# if attribute is called, it is assumed to be a method modifying its self
+		if isinstance(node.func, Attribute):
+			yield from results(node.func.value, inplace=True)
+		# if function is called with inplace presumtion it is assumed to modify its first argument
+		elif inplace:
+			arg = next(iter(node.args), None) or next(iter(node.keywords), None)
+			if arg:
+				yield from results(arg, inplace=True)
+	elif isinstance(node, AST):
+		for child in iter_child_nodes(node):
+			yield from results(child)
+	else:
+		for node in node:
+			yield from results(node, True)
 	
 def usage(code:Iterable[AST], scope:str, usages:dict=None, stops:dict=None) -> dict[str, Usage]:
 	''' analyse the variables usage in all function scopes defined in this AST 
@@ -653,7 +666,7 @@ def usage(code:Iterable[AST], scope:str, usages:dict=None, stops:dict=None) -> d
 		elif getattr(node, 'lineno', 0) > stops.get(scope, inf):
 			pass
 		# count statement usages
-		elif isinstance(node, (Expr, Assign)):
+		elif isinstance(node, (Expr, Assign, Return)):
 			for var in dependencies(node):
 				if var in wo or var in rw:
 					rw.add(var)
