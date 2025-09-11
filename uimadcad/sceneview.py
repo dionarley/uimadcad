@@ -181,8 +181,8 @@ class Scene(madcad.rendering.Scene, QObject):
 		''' return the source code of the given display, or None if not available '''
 		return self.app.interpreter.identified.get(id(getattr(display, 'source', None)))
 
-	
-class Root(madcad.rendering.Group):
+import madcad.kinematic.displays
+class Root(madcad.kinematic.displays.DictDisplay):
 	''' override for the scene root display, hiding annotations when the user sets '''
 	def stack(self, scene):
 		for step in super().stack(scene):
@@ -362,6 +362,7 @@ class SceneView(madcad.rendering.QView3D):
 			
 			if event.type() == QEvent.MouseButtonRelease:
 				self._update_active_selection()
+				
 	
 	def _populated_adjust(self):
 		''' if scene is no more empty, adjust the view automatically '''
