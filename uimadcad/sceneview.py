@@ -182,7 +182,7 @@ class Scene(madcad.rendering.Scene, QObject):
 		return self.app.interpreter.identified.get(id(getattr(display, 'source', None)))
 
 import madcad.kinematic.displays
-class Root(madcad.kinematic.displays.DictDisplay):
+class Root(madcad.kinematic.displays.ExplodableGroup):
 	''' override for the scene root display, hiding annotations when the user sets '''
 	def stack(self, scene):
 		for step in super().stack(scene):
