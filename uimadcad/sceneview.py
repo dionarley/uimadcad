@@ -17,6 +17,7 @@ from madcad.qt import (
 import madcad
 import madcad.scheme
 from madcad.rendering.d3 import Perspective, Orthographic, Turntable, Orbit
+from madcad.assembly.displays import ExplodableGroup
 from madcad.mesh import Mesh, Web, Wire
 from madcad.mathutils import *
 from . import settings
@@ -181,8 +182,7 @@ class Scene(madcad.rendering.Scene, QObject):
 		''' return the source code of the given display, or None if not available '''
 		return self.app.interpreter.identified.get(id(getattr(display, 'source', None)))
 
-import madcad.kinematic.displays
-class Root(madcad.kinematic.displays.ExplodableGroup):
+class Root(ExplodableGroup):
 	''' override for the scene root display, hiding annotations when the user sets '''
 	def stack(self, scene):
 		for step in super().stack(scene):
