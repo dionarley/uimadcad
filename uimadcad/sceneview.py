@@ -171,7 +171,7 @@ class Scene(madcad.rendering.Scene, QObject):
 				node = node[k]
 				stack.append(node)
 		# display.key is outdated
-		except KeyError:
+		except (KeyError, IndexError):
 			return
 		for node in reversed(stack):
 			located = self.source(node)
