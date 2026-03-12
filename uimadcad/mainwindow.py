@@ -8,7 +8,7 @@ from madcad.qt import (
 	Qt, QApplication, 
 	QWidget, QMainWindow, QDockWidget, QLabel, QGroupBox,
 	QShortcutEvent, QEvent,
-	QTimer, QPainter, QColor, QPalette, QSize, QRectF, QPoint,
+	QTimer, QPainter, QPen, QColor, QPalette, QSize, QRectF, QPoint,
 	)
 from madcad.rendering import Orthographic
 from madcad.mathutils import fvec3, fquat, pi
@@ -25,6 +25,7 @@ class MainWindow(QMainWindow):
 		self.app = app
 		
 		super().__init__()
+		self.setAttribute(Qt.WA_TranslucentBackground, True)
 		Initializer.process(self, parent=self)
 		# get the '*' marker in the window title when the document has been modified since last save
 		self.app.document.modificationChanged.connect(self.setWindowModified)
@@ -42,33 +43,39 @@ class MainWindow(QMainWindow):
 			self.app.open_uimadcad_settings,
 			self.app.open_pymadcad_settings,
 			])
-		self.addToolBar(Qt.LeftToolBarArea, ToolBar('file', [
+		toolbar_file = ToolBar('file', [
 			self.app.save,
 			self.app.save_as,
 			self.app.open,
 			self.app.new,
-			]))
-		self.addToolBar(Qt.LeftToolBarArea, self.toolbar_execute)
-		self.addToolBar(Qt.LeftToolBarArea, ToolBar('windowing', [
+			])
+		toolbar_windowing = ToolBar('windowing', [
 			self.new_sceneview,
 			self.new_scriptview,
 			# self.copy_layout_to_clipboard,
 			None,
-			# Button(icon = 'view-dual', 
+			# Button(icon = 'view-dual',
 			# 	flat = True,
-			# 	description = "reorganize the window following one of the predefined layouts", 
+			# 	description = "reorganize the window following one of the predefined layouts",
 			# 	menu = (Menu('layout', [
 					self.layout_default,
 					self.layout_double,
 					self.layout_triple,
 					self.layout_minimal,
 				# ]))),
-			]))
+			])
+		self.addToolBar(Qt.LeftToolBarArea, toolbar_file)
+		self.addToolBar(Qt.LeftToolBarArea, self.toolbar_execute)
+		self.addToolBar(Qt.LeftToolBarArea, toolbar_windowing)
 		
 		self.resize(*settings.window['size'])
 		self.layout_preset(settings.window['layout'])
 		self.open_panel.toggled.emit(False)
 		
+	def paintEvent(self, event):
+		painter = QPainter(self)
+		painter.fillRect(self.rect(), self.palette().window())
+
 	def keyPressEvent(self, event):
 		event.accept()
 		# reimplement top bar shortcuts here because Qt cannot deambiguate which view the shortcut belongs to
@@ -335,11 +342,16 @@ class DockedView(QDockWidget):
 	def paintEvent(self, event):
 		painter = QPainter(self)
 		painter.setRenderHint(QPainter.Antialiasing, True)
-		pen = painter.pen()
-		pen.setColor(self.palette().midlight().color())
+		radius = 2
+		# fill opaque background
+		painter.setPen(Qt.NoPen)
+		painter.setBrush(self.palette().window())
+		painter.drawRoundedRect(QRectF(0.5, 0.5, self.width()-1, self.height()-1), radius, radius)
+		# border
+		pen = QPen(self.palette().midlight().color())
 		pen.setWidth(1)
 		painter.setPen(pen)
-		radius = 2
+		painter.setBrush(Qt.NoBrush)
 		painter.drawRoundedRect(QRectF(0.5, 0.5, self.width()-1, self.height()-1), radius, radius)
 			
 	def close(self):

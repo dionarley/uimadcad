@@ -32,6 +32,7 @@ QGroupBox::title {
 QMainWindow > QToolBar {
 /* 	border: 1px solid palette(midlight); */
 	border-radius: 3px;
+	background-color: palette(window);
 }
 QToolBar::separator:vertical {
 	background: palette(midlight);
