@@ -188,7 +188,7 @@ class Root(ExplodableGroup):
 		for step in super().stack(scene):
 			if not isinstance(step, madcad.rendering.Step):
 				step = madcad.rendering.Step(*step)
-			if step.display.key[0] == 'annotations':
+			if step.display.key[0] == 'annotations' and not scene.options['display_annotations']:
 				continue
 			yield step
 
@@ -241,6 +241,7 @@ class SceneView(madcad.rendering.QView3D):
 			self.display_annotations,
 			self.display_grid,
 			self.display_base,
+			self.display_transparent,
 			None,
 			self.solid_freemove,
 			None,
@@ -314,7 +315,11 @@ class SceneView(madcad.rendering.QView3D):
 		# update scene when color changes
 		if evt.type() == QEvent.PaletteChange and madcad.settings.display['system_theme']:
 			self.scene.sync()
-		return super().changeEvent(evt)
+		accepted = super().changeEvent(evt)
+		# override transparency, madcad natively doesn't give one
+		madcad.settings.display['background_color'] = fvec4(madcad.settings.display['background_color'].xyz, 0.3)
+
+		return accepted
 		
 	def resizeEvent(self, evt):
 		super().resizeEvent(evt)
@@ -702,8 +707,8 @@ class SceneView(madcad.rendering.QView3D):
 		''' create the settings buttons '''
 		for name, kwargs in self._scene_options.items():
 			setattr(self, name, Action(
-				self._apply_scene_options, 
-				checkable = True, 
+				self._apply_scene_options,
+				checkable = True,
 				# name = name.replace('_', ' '),
 				name = '',
 				**kwargs))
@@ -725,7 +730,7 @@ class SceneView(madcad.rendering.QView3D):
 		attr = getattr(self, 'mode_'+self.scene.options['kinematic_manipulation'], None)
 		if attr:
 			attr.setChecked(True)
-			
+
 	def _apply_scene_options(self):
 		''' set all scene.options settings to the matching values from button states '''
 		for name in self._scene_options:
@@ -734,6 +739,12 @@ class SceneView(madcad.rendering.QView3D):
 			if getattr(self, 'mode_'+name).isChecked():
 				self.scene.options['kinematic_manipulation'] = name
 		self.scene.touch()
+		self.update()
+
+	@action(icon='edit-opacity', shortcut='Shift+T', checkable=True)
+	def display_transparent(self, checked):
+		''' transparent view background '''
+		self.enable_alpha = checked
 		self.update()
 	
 	def _standard_view(direction, name, shortcut, orientation):

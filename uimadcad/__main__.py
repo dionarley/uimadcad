@@ -66,7 +66,8 @@ if __name__ == '__main__':
 		madcad.settings.use_qt_colors()
 	if settings.scriptview['system_theme']:
 		settings.use_qt_colors()
-		
+	
+	# limit the number of cores that numpy is using, to prefent it to take all the cpu to uselessly parallelize simple operations
 	from threadpoolctl import threadpool_limits
 	with threadpool_limits(limits=1, user_api='blas'):
 	
